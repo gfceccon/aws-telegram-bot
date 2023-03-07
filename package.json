@@ -1,0 +1,13 @@
+{
+  "name": "aws-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {},
+  "devDependencies": {
+    "@aws-sdk/types": "^3.272.0",
+    "aws-sdk": "2.1329.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.284.0"
+  }
+}

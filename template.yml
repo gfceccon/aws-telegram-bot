@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Lambda application that calls the Lambda API.
+Resources:
+  telegramWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: telegramWebhook
+      Handler: index.handler
+      Runtime: nodejs18.x
+      CodeUri: telegramWebhook/.
+      Description: Telegram bot webhook
+      Timeout: 10
+      FunctionUrlConfig:
+        AuthType: NONE
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - AWSLambdaDynamoDBExecutionRole
+        - AmazonDynamoDBReadOnlyAccess
+      Tracing: Active
+      Layers:
+        - !Ref libs
+  updateDatabaseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: updateDatabase
+      Handler: index.handler
+      Runtime: nodejs18.x
+      CodeUri: updateDatabase/.
+      Description: YGO TCG card database update
+      Timeout: 10
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - DatabaseAdministrator
+      Events:
+        CWSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(1 day)'
+            Name: DailySchedule
+            Description: Daily pull schedule
+            Enabled: false
+      Tracing: Active
+      Layers:
+        - !Ref libs
+  updateDatabaseSQS:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: updateDatabaseSQS
+  updateDatabaseSQSPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - SQS:SendMessage
+              - SQS:ReceiveMessage
+            Effect: Allow
+            Principal: !GetAtt updateDatabaseFunction.Arn
+            Resource: !GetAtt updateDatabaseSQS.Arn
+      Queues:
+        - !Ref updateDatabaseSQS
+  libs:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: lambda-lib
+      Description: Dependencies for the Telegram Webhook function.
+      ContentUri: lib/.
+      CompatibleRuntimes:
+        - nodejs18.x

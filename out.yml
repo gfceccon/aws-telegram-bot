@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: An AWS Lambda application that calls the Lambda API.
+Resources:
+  telegramWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: telegramWebhook
+      Handler: index.handler
+      Runtime: nodejs18.x
+      CodeUri: s3://ygotcg-telegram-bot-bucket/5c5db793ac1d872e84f6a2d61ed753a4
+      Description: Telegram bot webhook
+      Timeout: 10
+      FunctionUrlConfig:
+        AuthType: NONE
+      Policies:
+      - AWSLambdaBasicExecutionRole
+      - AWSLambda_ReadOnlyAccess
+      - AWSLambdaDynamoDBExecutionRole
+      - AmazonDynamoDBReadOnlyAccess
+      Tracing: Active
+      Layers:
+      - Ref: libs
+  updateDatabaseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: updateDatabase
+      Handler: index.handler
+      Runtime: nodejs18.x
+      CodeUri: s3://ygotcg-telegram-bot-bucket/e14d933de21675cda82856495f6c6f83
+      Description: YGO TCG card database update
+      Timeout: 10
+      Policies:
+      - AWSLambdaBasicExecutionRole
+      - AWSLambda_ReadOnlyAccess
+      - DatabaseAdministrator
+      Events:
+        CWSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+            Name: DailySchedule
+            Description: Daily pull schedule
+            Enabled: false
+      Tracing: Active
+      Layers:
+      - Ref: libs
+  libs:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: lambda-lib
+      Description: Dependencies for the Telegram Webhook function.
+      ContentUri: s3://ygotcg-telegram-bot-bucket/7d8979549e1c7c8169b7bb2a4c466607
+      CompatibleRuntimes:
+      - nodejs18.x
