@@ -8,7 +8,7 @@ Resources:
       FunctionName: telegramWebhook
       Handler: index.handler
       Runtime: nodejs18.x
-      CodeUri: s3://ygotcg-telegram-bot-bucket/5c5db793ac1d872e84f6a2d61ed753a4
+      CodeUri: s3://ygotcg-telegram-bot-bucket/9ce01260ad034221c397e3581de7bf51
       Description: Telegram bot webhook
       Timeout: 10
       FunctionUrlConfig:
@@ -19,15 +19,13 @@ Resources:
       - AWSLambdaDynamoDBExecutionRole
       - AmazonDynamoDBReadOnlyAccess
       Tracing: Active
-      Layers:
-      - Ref: libs
   updateDatabaseFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: updateDatabase
       Handler: index.handler
       Runtime: nodejs18.x
-      CodeUri: s3://ygotcg-telegram-bot-bucket/e14d933de21675cda82856495f6c6f83
+      CodeUri: s3://ygotcg-telegram-bot-bucket/de442bf0bae5dfe5581c130e28abeea7
       Description: YGO TCG card database update
       Timeout: 10
       Policies:
@@ -35,21 +33,37 @@ Resources:
       - AWSLambda_ReadOnlyAccess
       - DatabaseAdministrator
       Events:
-        CWSchedule:
-          Type: Schedule
+        SQSEvent:
+          Type: SQS
           Properties:
-            Schedule: rate(1 day)
-            Name: DailySchedule
-            Description: Daily pull schedule
-            Enabled: false
+            BatchSize: 10
+            Enabled: true
+            Queue:
+              Fn::GetAtt:
+              - updateDatabaseSQS
+              - Arn
+            ScalingConfig:
+              MaximumConcurrency: 10
       Tracing: Active
-      Layers:
-      - Ref: libs
-  libs:
-    Type: AWS::Serverless::LayerVersion
+  updateDatabaseSQS:
+    Type: AWS::SQS::Queue
     Properties:
-      LayerName: lambda-lib
-      Description: Dependencies for the Telegram Webhook function.
-      ContentUri: s3://ygotcg-telegram-bot-bucket/7d8979549e1c7c8169b7bb2a4c466607
-      CompatibleRuntimes:
-      - nodejs18.x
+      QueueName: updateDatabaseSQS
+  updateDatabaseSQSPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action:
+          - SQS:SendMessage
+          - SQS:ReceiveMessage
+          Effect: Allow
+          Principal:
+            AWS:
+            - arn:aws:iam::103245333395:user/gfceccon
+          Resource:
+            Fn::GetAtt:
+            - updateDatabaseSQS
+            - Arn
+      Queues:
+      - Ref: updateDatabaseSQS

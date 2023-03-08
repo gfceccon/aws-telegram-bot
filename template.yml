@@ -2,13 +2,35 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: An AWS Lambda application that calls the Lambda API.
 Resources:
+  # user: 
+  #   Type: AWS::IAM::User
+  #   Properties:
+  #     Path: '/'
+  #     UserName: telegram-user
+  #     LoginProfile: 
+  #       Password: "pa$$W0rd"
+  #       PasswordResetRequired: true        
+  #     Policies: 
+  #       - PolicyName: telegram-bot
+  #         PolicyDocument:
+  #           Version: '2012-10-17'
+  #           Statement:
+  #             - Sid: updateDatabaseSQSFullAccess
+  #               Resource: 
+  #                 - '*'
+  #               Effect: Allow
+  #               Action:
+  #                 - 's3:*'
+  #                 - 'sqs:*'
+  #                 - 'lamda:*'
+  #                 - 'dynamodb:*'
   telegramWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: telegramWebhook
       Handler: index.handler
       Runtime: nodejs18.x
-      CodeUri: telegramWebhook/.
+      CodeUri: build/functions/telegramWebhook/.
       Description: Telegram bot webhook
       Timeout: 10
       FunctionUrlConfig:
@@ -19,15 +41,13 @@ Resources:
         - AWSLambdaDynamoDBExecutionRole
         - AmazonDynamoDBReadOnlyAccess
       Tracing: Active
-      Layers:
-        - !Ref libs
   updateDatabaseFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: updateDatabase
       Handler: index.handler
       Runtime: nodejs18.x
-      CodeUri: updateDatabase/.
+      CodeUri: build/functions/updateDatabase/.
       Description: YGO TCG card database update
       Timeout: 10
       Policies:
@@ -35,16 +55,15 @@ Resources:
         - AWSLambda_ReadOnlyAccess
         - DatabaseAdministrator
       Events:
-        CWSchedule:
-          Type: Schedule
-          Properties:
-            Schedule: 'rate(1 day)'
-            Name: DailySchedule
-            Description: Daily pull schedule
-            Enabled: false
+        SQSEvent:
+          Type: SQS
+          Properties: 
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt updateDatabaseSQS.Arn
+            ScalingConfig:
+              MaximumConcurrency: 10
       Tracing: Active
-      Layers:
-        - !Ref libs
   updateDatabaseSQS:
     Type: AWS::SQS::Queue
     Properties:
@@ -58,15 +77,9 @@ Resources:
               - SQS:SendMessage
               - SQS:ReceiveMessage
             Effect: Allow
-            Principal: !GetAtt updateDatabaseFunction.Arn
+            Principal:
+              AWS:
+                - <USER>
             Resource: !GetAtt updateDatabaseSQS.Arn
       Queues:
         - !Ref updateDatabaseSQS
-  libs:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: lambda-lib
-      Description: Dependencies for the Telegram Webhook function.
-      ContentUri: lib/.
-      CompatibleRuntimes:
-        - nodejs18.x
