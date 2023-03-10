@@ -13,6 +13,7 @@ exports.handler = async function (event: any, context: any) {
   const BOT_NAME = process.env.BOT_NAME;
   const TABLE_NAME = process.env.TABLE_NAME;
   const VARIABLES_TABLE_NAME = process.env.VARIABLES_TABLE_NAME;
+  const REGION = process.env.REGION;
 
   const updateMessage = JSON.parse(event.body) as Telegram.Update;
   if (!updateMessage.message) return;
@@ -22,7 +23,7 @@ exports.handler = async function (event: any, context: any) {
 
   const chatId = updateMessage.message.chat.id;
   const replyId = updateMessage.message.message_id;
-  let text = "Command not found, use /card <card name> to search for a card";
+  let text = "Command not found, use /card to get a random card";
 
   let commands: { [key: string]: string } = {};
   if (updateMessage.message.entities) {
@@ -45,7 +46,7 @@ exports.handler = async function (event: any, context: any) {
     commands["/card"] != undefined ||
     commands[`/card@${BOT_NAME}`] != undefined
   ) {
-    const db = new DynamoDBClient({ region: "us-east-2" });
+    const db = new DynamoDBClient({ region: `${REGION}` });
     const readBatch: Record<string, KeysAndAttributes> = {};
     readBatch[`${VARIABLES_TABLE_NAME}`] = {
       Keys: [{ id: { S: "MIN_CARD_ID" } }, { id: { S: "MAX_CARD_ID" } }],
