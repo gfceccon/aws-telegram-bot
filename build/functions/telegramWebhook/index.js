@@ -14,12 +14,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const https_1 = __importDefault(require("https"));
 const client_dynamodb_1 = require("@aws-sdk/client-dynamodb");
+const crypto_1 = require("crypto");
 exports.handler = function (event, context) {
-    var _a;
     return __awaiter(this, void 0, void 0, function* () {
         const BOT_TOKEN = process.env.BOT_TOKEN;
         const BOT_NAME = process.env.BOT_NAME;
         const TABLE_NAME = process.env.TABLE_NAME;
+        const VARIABLES_TABLE_NAME = process.env.VARIABLES_TABLE_NAME;
         const path = "/sendMessage";
         const host = `api.telegram.org/bot${BOT_TOKEN}`;
         const httpsOption = {
@@ -31,7 +32,7 @@ exports.handler = function (event, context) {
                 "Content-Type": "application/json",
             },
         };
-        const updateMessage = event.body;
+        const updateMessage = JSON.parse(event.body);
         if (!updateMessage.message)
             return;
         const messageText = updateMessage.message.text;
@@ -39,6 +40,7 @@ exports.handler = function (event, context) {
             return;
         const chatId = updateMessage.message.chat.id;
         const replyId = updateMessage.message.message_id;
+        console.log("IDS", messageText, chatId, replyId);
         let commands = {};
         if (updateMessage.message.entities) {
             commands = updateMessage.message.entities
@@ -46,40 +48,67 @@ exports.handler = function (event, context) {
                 .map((entity) => messageText.substring(entity.offset, entity.offset + entity.length))
                 .reduce((a, v) => (Object.assign(Object.assign({}, a), { [v]: v })), {});
         }
+        console.log("COMMANDS", commands);
         let tempText = messageText;
         Object.keys(commands).forEach((command) => (tempText = tempText.replace(command, "")));
+        console.log("NO COMMANDS", tempText);
         const noCommands = tempText;
         let text = "Command not found, use /card <card name> to search for a card";
         if (commands["/card"] || commands[`/card@${BOT_NAME}`]) {
             const db = new client_dynamodb_1.DynamoDBClient({ region: "us-east-2" });
-            let allResults = [];
-            let key = "0";
-            let results;
-            do {
-                results = yield db.send(new client_dynamodb_1.ScanCommand({
-                    TableName: `${TABLE_NAME}`,
-                    Select: "ALL_ATTRIBUTES",
-                    FilterExpression: "contains(name, :name)",
-                    ExclusiveStartKey: {
-                        id: { N: key },
-                    },
-                    ExpressionAttributeValues: {
-                        ":name": { S: `${noCommands}` },
-                    },
-                    Limit: 100,
-                }));
-                if (!results.LastEvaluatedKey)
-                    break;
-                if (!results.LastEvaluatedKey["id"].N)
-                    break;
-                key = results.LastEvaluatedKey["id"].N;
-                if (!results.Items)
-                    break;
-                allResults = [...allResults, ...results.Items];
-            } while (((_a = results.Items) === null || _a === void 0 ? void 0 : _a.length) || results.LastEvaluatedKey);
-            if (allResults.length > 0) {
-                const card = allResults[0];
-                const cardId = card["id"].S || "";
+            const readBatch = {};
+            readBatch[`${VARIABLES_TABLE_NAME}`] = {
+                Keys: [{ id: { S: "MIN_CARD_ID" } }, { id: { S: "MAX_CARD_ID" } }],
+            };
+            const variables = yield db.send(new client_dynamodb_1.BatchGetItemCommand({
+                RequestItems: readBatch,
+            }));
+            let minCardIdDb = null;
+            let maxCardIdDb = null;
+            if (variables.Responses && variables.Responses[`${VARIABLES_TABLE_NAME}`] && variables.Responses[`${VARIABLES_TABLE_NAME}`].length >= 2) {
+                minCardIdDb = variables.Responses[`${VARIABLES_TABLE_NAME}`][0]["value"] || null;
+                maxCardIdDb = variables.Responses[`${VARIABLES_TABLE_NAME}`][1]["value"] || null;
+            }
+            // let key = "0";
+            // let results: ScanCommandOutput;
+            // do {
+            //   results = await db.send(
+            //     new ScanCommand({
+            //       TableName: `${TABLE_NAME}`,
+            //       Select: "ALL_ATTRIBUTES",
+            //       FilterExpression: "contains(name, :name)",
+            //       ExclusiveStartKey: {
+            //         id: { N: key },
+            //       },
+            //       ExpressionAttributeValues: {
+            //         ":name": { S: `${noCommands}` },
+            //       },
+            //       Limit: 100,
+            //     })
+            //   );
+            //   if (!results.LastEvaluatedKey) break;
+            //   if (!results.LastEvaluatedKey["id"].N) break;
+            //   key = results.LastEvaluatedKey["id"].N;
+            //   if (!results.Items) break;
+            //   allResults = [...allResults, ...results.Items];
+            // } while (results.Items?.length || results.LastEvaluatedKey);
+            const maxKey = 1000000;
+            let key = (0, crypto_1.randomInt)(maxKey);
+            if (minCardIdDb && minCardIdDb.S && maxCardIdDb && maxCardIdDb.S) {
+                key = (0, crypto_1.randomInt)(parseInt(minCardIdDb.S) - 1, parseInt(maxCardIdDb.S) - 1);
+            }
+            const results = yield db.send(new client_dynamodb_1.ScanCommand({
+                TableName: `${TABLE_NAME}`,
+                Select: "ALL_ATTRIBUTES",
+                ExclusiveStartKey: {
+                    id: { N: key.toString() },
+                },
+                Limit: 1,
+            }));
+            const cardItems = results.Items || [];
+            if (cardItems.length > 0) {
+                const card = cardItems[0];
+                const cardId = card["id"].N || "";
                 const cardName = card["name"].S || "";
                 const cardType = card["type"].S || "";
                 const cardDescription = card["desc"].S || "";
@@ -91,9 +120,9 @@ exports.handler = function (event, context) {
                 const cardArchetype = card["archetype"].S || "";
                 const cardScale = card["scale"].S || "";
                 const cardLink = card["link"].S || "";
-                const cardLinkMarkers = card["linkMarkers"].SS || [""];
-                const cardSets = card["cardSets"].SS || [""];
-                const cardImages = card["cardImages"].SS || [""];
+                const cardLinkMarkers = card["linkMarkers"].SS || [];
+                const cardSets = card["cardSets"].SS || [];
+                const cardImages = card["cardImages"].SS || [];
                 let type = "";
                 const tuner = cardType.indexOf("Tuner") > -1 ? true : false;
                 if (cardType.indexOf("Monster") > -1) {

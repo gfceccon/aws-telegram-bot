@@ -1,23 +1,22 @@
 import {
   DynamoDBClient,
   BatchWriteItemCommand,
-  WriteRequest
+  WriteRequest,
+  GetItemCommand,
 } from "@aws-sdk/client-dynamodb";
-import {
-  Card,
-  CardInput,
-} from "./card";
+import { Card, CardInput } from "./card";
 
 // Handler
 exports.handler = async function (event: any, context: any) {
   const cards: Card[] = [];
   const batchRequests: WriteRequest[] = [];
 
-  if(!process.env.TABLE_NAME) {
+  if (!process.env.TABLE_NAME || !process.env.VARIABLES_TABLE_NAME) {
     return;
   }
   const tableName = process.env.TABLE_NAME;
-  
+  const variablesTableName = process.env.VARIABLES_TABLE_NAME;
+
   event.Records.forEach((record: { body: string }) => {
     const cardInput = JSON.parse(record.body) as CardInput;
     const card = new Card(cardInput);
@@ -41,8 +40,12 @@ exports.handler = async function (event: any, context: any) {
           linkMarkers: {
             SS: [...new Set(card.linkMarkers), ""],
           },
-          cardSets: { SS: [... new Set(card.cardSets.map((set) => set.setCode)), ""]},
-          cardImages: { SS: [...card.cardImages.map((img) => img.imageUrl), ""] },
+          cardSets: {
+            SS: [...new Set(card.cardSets.map((set) => set.setCode)), ""],
+          },
+          cardImages: {
+            SS: [...card.cardImages.map((img) => img.imageUrl), ""],
+          },
         },
       },
     });
@@ -51,9 +54,11 @@ exports.handler = async function (event: any, context: any) {
   const db = new DynamoDBClient({ region: "us-east-2" });
   const batch: Record<string, WriteRequest[]> = {};
   batch[tableName] = batchRequests;
-  const results = await db.send(
+  await db.send(
     new BatchWriteItemCommand({
-      RequestItems: batch
+      RequestItems: batch,
     })
   );
+
+  db.destroy();
 };

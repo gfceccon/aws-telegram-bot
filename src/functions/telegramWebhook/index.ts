@@ -8,13 +8,17 @@ import {
   ScanCommand,
   ScanCommandOutput,
   AttributeValue,
+  BatchGetItemCommand,
+  KeysAndAttributes,
 } from "@aws-sdk/client-dynamodb";
 import { Telegram } from "./telegram";
+import { randomInt } from "crypto";
 
 exports.handler = async function (event: any, context: any) {
   const BOT_TOKEN = process.env.BOT_TOKEN;
   const BOT_NAME = process.env.BOT_NAME;
   const TABLE_NAME = process.env.TABLE_NAME;
+  const VARIABLES_TABLE_NAME = process.env.VARIABLES_TABLE_NAME;
 
   const path = "/sendMessage";
   const host = `api.telegram.org/bot${BOT_TOKEN}`;
@@ -28,7 +32,7 @@ exports.handler = async function (event: any, context: any) {
     },
   };
 
-  const updateMessage = event.body as Telegram.Update;
+  const updateMessage = JSON.parse(event.body) as Telegram.Update;
   if (!updateMessage.message) return;
 
   const messageText = updateMessage.message.text;
@@ -36,6 +40,8 @@ exports.handler = async function (event: any, context: any) {
 
   const chatId = updateMessage.message.chat.id;
   const replyId = updateMessage.message.message_id;
+
+  console.log("IDS", messageText, chatId, replyId);
 
   let commands: { [key: string]: string } = {};
   if (updateMessage.message.entities) {
@@ -46,45 +52,83 @@ exports.handler = async function (event: any, context: any) {
       )
       .reduce((a, v) => ({ ...a, [v]: v }), {});
   }
+  console.log("COMMANDS", commands);
   let tempText = messageText;
   Object.keys(commands).forEach(
     (command) => (tempText = tempText.replace(command, ""))
   );
+  console.log("NO COMMANDS", tempText);
   const noCommands = tempText;
   let text = "Command not found, use /card <card name> to search for a card";
 
   if (commands["/card"] || commands[`/card@${BOT_NAME}`]) {
     const db = new DynamoDBClient({ region: "us-east-2" });
-    let allResults: Record<string, AttributeValue>[] = [];
+    
+    const readBatch: Record<string, KeysAndAttributes> = {};
+    readBatch[`${VARIABLES_TABLE_NAME}`] = {
+      Keys: [{ id: { S: "MIN_CARD_ID" } }, { id: { S: "MAX_CARD_ID" } }],
+    };
 
-    let key = "0";
-    let results: ScanCommandOutput;
-    do {
-      results = await db.send(
-        new ScanCommand({
-          TableName: `${TABLE_NAME}`,
-          Select: "ALL_ATTRIBUTES",
-          FilterExpression: "contains(name, :name)",
-          ExclusiveStartKey: {
-            id: { N: key },
-          },
-          ExpressionAttributeValues: {
-            ":name": { S: `${noCommands}` },
-          },
-          Limit: 100,
-        })
-      );
-      if (!results.LastEvaluatedKey) break;
-      if (!results.LastEvaluatedKey["id"].N) break;
-      key = results.LastEvaluatedKey["id"].N;
+    const variables = await db.send(
+      new BatchGetItemCommand({
+        RequestItems: readBatch,
+      })
+    );
+    let minCardIdDb = null;
+    let maxCardIdDb = null;
 
-      if (!results.Items) break;
-      allResults = [...allResults, ...results.Items];
-    } while (results.Items?.length || results.LastEvaluatedKey);
+    if (variables.Responses && variables.Responses[`${VARIABLES_TABLE_NAME}`] && variables.Responses[`${VARIABLES_TABLE_NAME}`].length >= 2) {
+      minCardIdDb = variables.Responses[`${VARIABLES_TABLE_NAME}`][0]["value"] || null;
+      maxCardIdDb = variables.Responses[`${VARIABLES_TABLE_NAME}`][1]["value"] || null;
+    }
 
-    if (allResults.length > 0) {
-      const card = allResults[0];
-      const cardId = card["id"].S || "";
+    // let key = "0";
+    // let results: ScanCommandOutput;
+    // do {
+    //   results = await db.send(
+    //     new ScanCommand({
+    //       TableName: `${TABLE_NAME}`,
+    //       Select: "ALL_ATTRIBUTES",
+    //       FilterExpression: "contains(name, :name)",
+    //       ExclusiveStartKey: {
+    //         id: { N: key },
+    //       },
+    //       ExpressionAttributeValues: {
+    //         ":name": { S: `${noCommands}` },
+    //       },
+    //       Limit: 100,
+    //     })
+    //   );
+    //   if (!results.LastEvaluatedKey) break;
+    //   if (!results.LastEvaluatedKey["id"].N) break;
+    //   key = results.LastEvaluatedKey["id"].N;
+
+    //   if (!results.Items) break;
+    //   allResults = [...allResults, ...results.Items];
+    // } while (results.Items?.length || results.LastEvaluatedKey);
+
+    const maxKey = 1000000;
+    let key = randomInt(maxKey);
+    if(minCardIdDb && minCardIdDb.S && maxCardIdDb && maxCardIdDb.S) {
+      key = randomInt(parseInt(minCardIdDb.S) - 1, parseInt(maxCardIdDb.S) - 1);
+    }
+
+    const results = await db.send(
+      new ScanCommand({
+        TableName: `${TABLE_NAME}`,
+        Select: "ALL_ATTRIBUTES",
+        ExclusiveStartKey: {
+          id: { N: key.toString() },
+        },
+        Limit: 1,
+      })
+    );
+    
+    const cardItems = results.Items || [];
+
+    if (cardItems.length > 0) {
+      const card = cardItems[0];
+      const cardId = card["id"].N || "";
       const cardName = card["name"].S || "";
       const cardType = card["type"].S || "";
       const cardDescription = card["desc"].S || "";
@@ -96,9 +140,9 @@ exports.handler = async function (event: any, context: any) {
       const cardArchetype = card["archetype"].S || "";
       const cardScale = card["scale"].S || "";
       const cardLink = card["link"].S || "";
-      const cardLinkMarkers = card["linkMarkers"].SS || [""];
-      const cardSets = card["cardSets"].SS || [""];
-      const cardImages = card["cardImages"].SS || [""];
+      const cardLinkMarkers = card["linkMarkers"].SS || [];
+      const cardSets = card["cardSets"].SS || [];
+      const cardImages = card["cardImages"].SS || [];
 
       let type = "";
       const tuner = cardType.indexOf("Tuner") > -1 ? true : false;

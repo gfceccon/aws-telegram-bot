@@ -7,6 +7,10 @@ Parameters:
     Description: Dynamo YGO TCG table name
     Type: String
     Default: ygoTcg
+  variablesTableName:
+    Description: Dynamo YGO TCG table name
+    Type: String
+    Default: variables
   userId:
     Description: User ID for SQS and SQS client with permissions
     Type: String
@@ -28,6 +32,17 @@ Resources:
       KeySchema:
         - AttributeName: id
           KeyType: HASH
+  variablesDynamoDatabase:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref variablesTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
   telegramWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -36,6 +51,7 @@ Resources:
           BOT_NAME: !Ref botName
           BOT_TOKEN: !Ref botToken
           TABLE_NAME: !Ref ygoTcgTableName
+          VARIABLES_TABLE_NAME: !Ref variablesTableName
       FunctionName: telegramWebhook
       Handler: index.handler
       Runtime: nodejs18.x
@@ -56,6 +72,7 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ygoTcgTableName
+          VARIABLES_TABLE_NAME: !Ref variablesTableName
       FunctionName: updateDatabase
       Handler: index.handler
       Runtime: nodejs18.x

@@ -16,10 +16,11 @@ exports.handler = function (event, context) {
     return __awaiter(this, void 0, void 0, function* () {
         const cards = [];
         const batchRequests = [];
-        if (!process.env.TABLE_NAME) {
+        if (!process.env.TABLE_NAME || !process.env.VARIABLES_TABLE_NAME) {
             return;
         }
         const tableName = process.env.TABLE_NAME;
+        const variablesTableName = process.env.VARIABLES_TABLE_NAME;
         event.Records.forEach((record) => {
             var _a, _b, _c;
             const cardInput = JSON.parse(record.body);
@@ -43,8 +44,12 @@ exports.handler = function (event, context) {
                         linkMarkers: {
                             SS: [...new Set(card.linkMarkers), ""],
                         },
-                        cardSets: { SS: [...new Set(card.cardSets.map((set) => set.setCode)), ""] },
-                        cardImages: { SS: [...card.cardImages.map((img) => img.imageUrl), ""] },
+                        cardSets: {
+                            SS: [...new Set(card.cardSets.map((set) => set.setCode)), ""],
+                        },
+                        cardImages: {
+                            SS: [...card.cardImages.map((img) => img.imageUrl), ""],
+                        },
                     },
                 },
             });
@@ -52,8 +57,9 @@ exports.handler = function (event, context) {
         const db = new client_dynamodb_1.DynamoDBClient({ region: "us-east-2" });
         const batch = {};
         batch[tableName] = batchRequests;
-        const results = yield db.send(new client_dynamodb_1.BatchWriteItemCommand({
-            RequestItems: batch
+        yield db.send(new client_dynamodb_1.BatchWriteItemCommand({
+            RequestItems: batch,
         }));
+        db.destroy();
     });
 };
