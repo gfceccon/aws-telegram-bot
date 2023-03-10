@@ -72,12 +72,14 @@ cd ..
 ```
 
 Now, create the envirornment configuration file for the Nodejs client. Create a `.env` file at the root folder with the following configuration. The `CARDINFO_URL` is the API URL that will return the card information (see `cardinfo.json` for an example). The other variables are from AWS stack: account access and secret key; region; and SQS queue URL (which you don't have yet).
+
 ```
 CARDINFO_URL=""
 ACCESS_KEY=""
 SECRET_KEY=""
 REGION=""
 QUEUE_URL=""
+VARIABLES_TABLE_NAME=""
 ```
 
 To build the project, run `npm run build`, it'll compile the Typescript files and put at the `build/` folder. To update the database, run `npm run start`, but don't run this until the AWS stack is built.
