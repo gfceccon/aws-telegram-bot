@@ -73,14 +73,14 @@ const sendDb = async (
   cards: CardInput[],
   VARIABLES_TABLE_NAME: string,
   ACCESS_KEY: string,
-  SECREAT_KEY: string,
+  SECRET_KEY: string,
   REGION: string
 ) => {
   const db = new DynamoDBClient({
     region: REGION,
     credentials: {
       accessKeyId: ACCESS_KEY,
-      secretAccessKey: SECREAT_KEY,
+      secretAccessKey: SECRET_KEY,
     },
   });
 
