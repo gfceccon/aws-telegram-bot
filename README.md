@@ -34,6 +34,10 @@ First, create a file named `config.json` at the root folder, fill it with the en
          "ParameterValue": "variables"
      },
      {
+         "ParameterKey": "region",
+         "ParameterValue": "us-east-2"
+     },
+     {
          "ParameterKey": "userId",
          "ParameterValue": "<YOUR USER ID>"
      },
