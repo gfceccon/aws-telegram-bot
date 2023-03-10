@@ -29,6 +29,14 @@ config.json
 
 npm run build
 
+cd layer
+rm lib/
+rm node_modules/
+npm install --production
+mkdir lib/nodejs/
+move node_modules lib/nodejs/
+cd ..
+
 aws s3 mb s3://ygotcg-telegram-bot-bucket
 
 aws cloudformation package --template-file template.yml --s3-bucket ygotcg-telegram-bot-bucket --output-template-file out.yml

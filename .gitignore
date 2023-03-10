@@ -132,3 +132,4 @@ log.json
 config.json
 help.txt
 build/
+layer/lib/

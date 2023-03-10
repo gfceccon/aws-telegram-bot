@@ -1,13 +1,7 @@
-import https from "https";
+import request from "request";
 import {
   DynamoDBClient,
-  BatchWriteItemCommand,
-  WriteRequest,
-  GetItemCommand,
-  QueryCommand,
   ScanCommand,
-  ScanCommandOutput,
-  AttributeValue,
   BatchGetItemCommand,
   KeysAndAttributes,
 } from "@aws-sdk/client-dynamodb";
@@ -20,18 +14,6 @@ exports.handler = async function (event: any, context: any) {
   const TABLE_NAME = process.env.TABLE_NAME;
   const VARIABLES_TABLE_NAME = process.env.VARIABLES_TABLE_NAME;
 
-  const path = "/sendMessage";
-  const host = `api.telegram.org/bot${BOT_TOKEN}`;
-  const httpsOption = {
-    hostname: host,
-    port: 443,
-    path: path,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  };
-
   const updateMessage = JSON.parse(event.body) as Telegram.Update;
   if (!updateMessage.message) return;
 
@@ -40,8 +22,7 @@ exports.handler = async function (event: any, context: any) {
 
   const chatId = updateMessage.message.chat.id;
   const replyId = updateMessage.message.message_id;
-
-  console.log("IDS", messageText, chatId, replyId);
+  let text = "Command not found, use /card <card name> to search for a card";
 
   let commands: { [key: string]: string } = {};
   if (updateMessage.message.entities) {
@@ -52,18 +33,19 @@ exports.handler = async function (event: any, context: any) {
       )
       .reduce((a, v) => ({ ...a, [v]: v }), {});
   }
-  console.log("COMMANDS", commands);
+
   let tempText = messageText;
   Object.keys(commands).forEach(
     (command) => (tempText = tempText.replace(command, ""))
   );
-  console.log("NO COMMANDS", tempText);
-  const noCommands = tempText;
-  let text = "Command not found, use /card <card name> to search for a card";
 
-  if (commands["/card"] || commands[`/card@${BOT_NAME}`]) {
+  const noCommands = tempText;
+
+  if (
+    commands["/card"] != undefined ||
+    commands[`/card@${BOT_NAME}`] != undefined
+  ) {
     const db = new DynamoDBClient({ region: "us-east-2" });
-    
     const readBatch: Record<string, KeysAndAttributes> = {};
     readBatch[`${VARIABLES_TABLE_NAME}`] = {
       Keys: [{ id: { S: "MIN_CARD_ID" } }, { id: { S: "MAX_CARD_ID" } }],
@@ -77,39 +59,20 @@ exports.handler = async function (event: any, context: any) {
     let minCardIdDb = null;
     let maxCardIdDb = null;
 
-    if (variables.Responses && variables.Responses[`${VARIABLES_TABLE_NAME}`] && variables.Responses[`${VARIABLES_TABLE_NAME}`].length >= 2) {
-      minCardIdDb = variables.Responses[`${VARIABLES_TABLE_NAME}`][0]["value"] || null;
-      maxCardIdDb = variables.Responses[`${VARIABLES_TABLE_NAME}`][1]["value"] || null;
+    if (
+      variables.Responses &&
+      variables.Responses[`${VARIABLES_TABLE_NAME}`] &&
+      variables.Responses[`${VARIABLES_TABLE_NAME}`].length >= 2
+    ) {
+      minCardIdDb =
+        variables.Responses[`${VARIABLES_TABLE_NAME}`][0]["value"] || null;
+      maxCardIdDb =
+        variables.Responses[`${VARIABLES_TABLE_NAME}`][1]["value"] || null;
     }
-
-    // let key = "0";
-    // let results: ScanCommandOutput;
-    // do {
-    //   results = await db.send(
-    //     new ScanCommand({
-    //       TableName: `${TABLE_NAME}`,
-    //       Select: "ALL_ATTRIBUTES",
-    //       FilterExpression: "contains(name, :name)",
-    //       ExclusiveStartKey: {
-    //         id: { N: key },
-    //       },
-    //       ExpressionAttributeValues: {
-    //         ":name": { S: `${noCommands}` },
-    //       },
-    //       Limit: 100,
-    //     })
-    //   );
-    //   if (!results.LastEvaluatedKey) break;
-    //   if (!results.LastEvaluatedKey["id"].N) break;
-    //   key = results.LastEvaluatedKey["id"].N;
-
-    //   if (!results.Items) break;
-    //   allResults = [...allResults, ...results.Items];
-    // } while (results.Items?.length || results.LastEvaluatedKey);
 
     const maxKey = 1000000;
     let key = randomInt(maxKey);
-    if(minCardIdDb && minCardIdDb.S && maxCardIdDb && maxCardIdDb.S) {
+    if (minCardIdDb && minCardIdDb.S && maxCardIdDb && maxCardIdDb.S) {
       key = randomInt(parseInt(minCardIdDb.S) - 1, parseInt(maxCardIdDb.S) - 1);
     }
 
@@ -123,7 +86,7 @@ exports.handler = async function (event: any, context: any) {
         Limit: 1,
       })
     );
-    
+
     const cardItems = results.Items || [];
 
     if (cardItems.length > 0) {
@@ -133,9 +96,9 @@ exports.handler = async function (event: any, context: any) {
       const cardType = card["type"].S || "";
       const cardDescription = card["desc"].S || "";
       const cardRace = card["race"].S || "";
-      const cardAttack = card["atk"].S || "";
-      const cardDefense = card["def"].S || "";
-      const cardLevel = card["level"].S || "";
+      const cardAttack = card["atk"].N || "";
+      const cardDefense = card["def"].N || "";
+      const cardLevel = card["level"].N || "";
       const cardAttribute = card["attribute"].S || "";
       const cardArchetype = card["archetype"].S || "";
       const cardScale = card["scale"].S || "";
@@ -144,41 +107,63 @@ exports.handler = async function (event: any, context: any) {
       const cardSets = card["cardSets"].SS || [];
       const cardImages = card["cardImages"].SS || [];
 
-      let type = "";
       const tuner = cardType.indexOf("Tuner") > -1 ? true : false;
+      let type = "";
+      let level = "";
 
       if (cardType.indexOf("Monster") > -1) {
-        if (cardType.indexOf("Normal") > -1) type = "NORMAL_MONSTER";
-        else type = "EFFECT_MONSTER";
+        level = `Level ${cardLevel}`;
 
-        if (type.indexOf("Synchro") > -1) type = "SYNCHRO_MONSTER";
+        if (cardType.indexOf("Normal") > -1) {
+          type = "NORMAL_MONSTER";
+        } else {
+          type = "EFFECT_MONSTER";
+        }
 
-        if (type.indexOf("Xyz") > -1) type = "XYZ_MONSTER";
+        if (cardType.indexOf("Synchro") > -1) {
+          type = "SYNCHRO_MONSTER";
+          level = `Synchro ${cardLevel}`;
+        }
 
-        if (type.indexOf("Pendulum") > -1) type = "PENDULUM_MONSTER";
+        if (cardType.indexOf("Xyz") > -1) {
+          type = "XYZ_MONSTER";
+          level = `Rank ${cardLevel}`;
+        }
 
-        if (type.indexOf("Link") > -1) type = "LINK_MONSTER";
+        if (cardType.indexOf("Pendulum") > -1) {
+          type = "PENDULUM_MONSTER";
+          level = `Pendulum ${cardLevel} | Scale ${cardScale}`;
+        }
+
+        if (cardType.indexOf("Link") > -1) {
+          type = "LINK_MONSTER";
+          let arrows = cardLinkMarkers
+            .filter((link) => link.length > 0)
+            .map((marker) => marker.toUpperCase())
+            .join(", ");
+          level = `Link ${cardLink} | Markers: ${arrows}`;
+        }
       }
 
-      let text = "";
-      text.concat("*" + cardName + "*");
-      text.concat("\n");
+      text = "";
+      text = text.concat("*" + cardName + "*");
+      text = text.concat("\n");
 
       if (cardType.length > 0) {
-        text.concat(cardType);
-        if (cardAttribute.length > 0) text.concat("\n");
+        text = text.concat(cardType);
+        if (cardAttribute.length > 0) text = text.concat("\n");
       }
       if (cardRace.length > 0) {
-        text.concat(cardRace);
+        text = text.concat(cardRace);
       }
       if (cardAttribute.length > 0) {
-        text.concat(" " + cardAttribute);
-        text.concat("\n");
+        text = text.concat(" " + cardAttribute);
+        text = text.concat("\n");
       }
-      if (cardLevel.length > 0) {
-        if (tuner) text.concat("Tuner ");
-        text.concat(cardLevel);
-        text.concat("\n");
+      if (level.length > 0) {
+        if (tuner) text = text.concat("Tuner ");
+        text = text.concat(level);
+        text = text.concat("\n");
       }
       switch (type) {
         case "NORMAL_MONSTER":
@@ -186,39 +171,64 @@ exports.handler = async function (event: any, context: any) {
         case "SYNCHRO_MONSTER":
         case "XYZ_MONSTER":
         case "PENDULUM_MONSTER":
-          text.concat(
+          text = text.concat(
             "Attack *" + cardAttack + "* / Defense *" + cardDefense + "*"
           );
-          text.concat("\n");
+          text = text.concat("\n");
           break;
         case "LINK_MONSTER":
-          text.concat("Attack *" + cardAttack + "*");
-          text.concat("\n");
+          text = text.concat("Attack *" + cardAttack + "*");
+          text = text.concat("\n");
           break;
       }
-      text.concat("\n");
-      text.concat("_" + cardDescription + "_");
+      text = text.concat("\n");
+      text = text.concat("_" + cardDescription + "_");
 
-      if (cardImages.length > 0) {
-        text.concat("\n");
-        text.concat("\n");
-        text.concat(cardImages[0]);
+      text = text.replace("-", "\\-").replace("[", "\\[").replace("]", "\\]");
+
+      let images = cardImages.filter((img) => img.length > 0);
+      if (images.length > 0) {
+        text = text.concat("\n");
+        text = text.concat("\n");
+        text = text.concat(`[Imagem](${images[0]})`);
       }
     }
   }
 
-  const sendMessage: Telegram.SendMessage = {
+  const sendMessage = {
     chat_id: chatId,
     text: text,
-    reply_to_message_id: replyId,
+    parse_mode: "Markdown",
   };
 
-  const req = https.request(httpsOption);
-  req.on("error", (error) => {
-    console.log(error);
-  });
-  req.write(JSON.stringify(sendMessage));
-  req.end();
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+  let sendTelegramMessage = () => {
+    return new Promise((resolve, reject) => {
+      request(
+        url,
+        {
+          json: true,
+          method: "POST",
+          body: sendMessage,
+        },
+        (error, response, body) => {
+          if (error) {
+            reject(error);
+          }
+          if (response.statusCode != 200) {
+            reject(response);
+          }
+          resolve(body);
+        }
+      );
+    });
+  };
+
+  await sendTelegramMessage()
+    .then((body) => {})
+    .catch((error) => {
+      console.log(error);
+    });
 
   return {
     statusCode: 200,
