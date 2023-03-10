@@ -11,6 +11,10 @@ Parameters:
     Description: Dynamo YGO TCG table name
     Type: String
     Default: variables
+  region:
+    Description: Dynamo YGO TCG table name
+    Type: String
+    Default: us-east-2
   userId:
     Description: User ID for SQS and SQS client with permissions
     Type: String
@@ -60,6 +64,7 @@ Resources:
           BOT_TOKEN: !Ref botToken
           TABLE_NAME: !Ref ygoTcgTableName
           VARIABLES_TABLE_NAME: !Ref variablesTableName
+          REGION: !Ref region
       FunctionName: telegramWebhook
       Handler: index.handler
       Runtime: nodejs18.x
@@ -83,6 +88,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref ygoTcgTableName
           VARIABLES_TABLE_NAME: !Ref variablesTableName
+          REGION: !Ref region
       FunctionName: updateDatabase
       Handler: index.handler
       Runtime: nodejs18.x
