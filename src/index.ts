@@ -5,7 +5,6 @@ import {
   BatchGetItemCommand,
   BatchWriteItemCommand,
   DynamoDBClient,
-  GetItemCommand,
   KeysAndAttributes,
   WriteRequest,
 } from "@aws-sdk/client-dynamodb";
@@ -24,14 +23,14 @@ const getCards = async (url: string): Promise<CardInput[]> => {
 const sendSQS = async (
   cards: CardInput[],
   ACCESS_KEY: string,
-  SECREAT_KEY: string,
+  SECRET_KEY: string,
   REGION: string,
   QUEUE_URL: string
 ) => {
   const sqs = new SQSClient({
     credentials: {
       accessKeyId: ACCESS_KEY,
-      secretAccessKey: SECREAT_KEY,
+      secretAccessKey: SECRET_KEY,
     },
     region: REGION,
   });
@@ -84,25 +83,6 @@ const sendDb = async (
       secretAccessKey: SECREAT_KEY,
     },
   });
-
-  // const minCardIdDb = await db.send(
-  //   new GetItemCommand({
-  //     TableName: `${VARIABLES_TABLE_NAME}`,
-  //     Key: {
-  //       id: { S: "MIN_CARD_ID" },
-  //     },
-  //     AttributesToGet: ["value"],
-  //   })
-  // );
-  //   const maxCardIdDb = await db.send(
-  // new GetItemCommand({
-  //   TableName: `${VARIABLES_TABLE_NAME}`,
-  //   Key: {
-  //     id: { S: "MAX_CARD_ID" },
-  //   },
-  //   AttributesToGet: ["value"],
-  // })
-  // );
 
   const readBatch: Record<string, KeysAndAttributes> = {};
   readBatch[VARIABLES_TABLE_NAME] = {
@@ -175,7 +155,7 @@ const sendDb = async (
   if (
     !process.env.CARDINFO_URL ||
     !process.env.ACCESS_KEY ||
-    !process.env.SECREAT_KEY ||
+    !process.env.SECRET_KEY ||
     !process.env.REGION ||
     !process.env.QUEUE_URL ||
     !process.env.VARIABLES_TABLE_NAME
@@ -185,34 +165,34 @@ const sendDb = async (
   const cards = await getCards(process.env.CARDINFO_URL);
   console.log("TOTAL NUMBER OF CARDS", cards.length);
 
-  // console.log("SENDING CARDS TO SQS");
-  // const sqsOuput = await sendSQS(
-  //   cards,
-  //   process.env.ACCESS_KEY,
-  //   process.env.SECREAT_KEY,
-  //   process.env.REGION,
-  //   process.env.QUEUE_URL
-  // );
+  console.log("SENDING CARDS TO SQS");
+  const sqsOuput = await sendSQS(
+    cards,
+    process.env.ACCESS_KEY,
+    process.env.SECRET_KEY,
+    process.env.REGION,
+    process.env.QUEUE_URL
+  );
 
-  // if (sqsOuput) {
-  //   const output = sqsOuput.reduce(
-  //     (previous, current) => {
-  //       return {
-  //         successful: current.successful + previous.successful,
-  //         failed: current.failed + previous.failed,
-  //       };
-  //     },
-  //     { successful: 0, failed: 0 }
-  //   );
-  //   console.log("SQS OUTPUT", output);
-  // }
+  if (sqsOuput) {
+    const output = sqsOuput.reduce(
+      (previous, current) => {
+        return {
+          successful: current.successful + previous.successful,
+          failed: current.failed + previous.failed,
+        };
+      },
+      { successful: 0, failed: 0 }
+    );
+    console.log("SQS OUTPUT", output);
+  }
 
   console.log("SENDING VARIABLES TO DYNAMODB");
   const dbOutput = await sendDb(
     cards,
     process.env.VARIABLES_TABLE_NAME,
     process.env.ACCESS_KEY,
-    process.env.SECREAT_KEY,
+    process.env.SECRET_KEY,
     process.env.REGION
   );
 

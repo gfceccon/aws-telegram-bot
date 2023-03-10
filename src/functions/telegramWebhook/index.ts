@@ -140,8 +140,8 @@ exports.handler = async function (event: any, context: any) {
           let arrows = cardLinkMarkers
             .filter((link) => link.length > 0)
             .map((marker) => marker.toUpperCase())
-            .join(", ");
-          level = `Link ${cardLink} | Markers: ${arrows}`;
+            .join(" | ");
+          level = `Link ${cardLink} | ${arrows}`;
         }
       }
 
@@ -149,22 +149,23 @@ exports.handler = async function (event: any, context: any) {
       text = text.concat("*" + cardName + "*");
       text = text.concat("\n");
 
-      if (cardType.length > 0) {
+
+      if (cardType.indexOf("Monster") > -1) {
         text = text.concat(cardType);
-        if (cardAttribute.length > 0) text = text.concat("\n");
-      }
-      if (cardRace.length > 0) {
-        text = text.concat(cardRace);
-      }
-      if (cardAttribute.length > 0) {
-        text = text.concat(" " + cardAttribute);
         text = text.concat("\n");
+        text = text.concat(`${cardRace} ${cardAttribute}`);
+        text = text.concat("\n");
+      } else {
+          text = text.concat(`${cardRace} ${cardType}`);
+          text = text.concat("\n");
       }
+
       if (level.length > 0) {
         if (tuner) text = text.concat("Tuner ");
         text = text.concat(level);
         text = text.concat("\n");
       }
+
       switch (type) {
         case "NORMAL_MONSTER":
         case "EFFECT_MONSTER":
@@ -181,23 +182,24 @@ exports.handler = async function (event: any, context: any) {
           text = text.concat("\n");
           break;
       }
-      text = text.concat("\n");
+
       text = text.concat("_" + cardDescription + "_");
 
-      text = text.replace("-", "\\-").replace("[", "\\[").replace("]", "\\]");
+      text = text.replace("-", "\-").replace("[", "\[").replace("]", "\]");
 
       let images = cardImages.filter((img) => img.length > 0);
       if (images.length > 0) {
         text = text.concat("\n");
         text = text.concat("\n");
-        text = text.concat(`[Imagem](${images[0]})`);
+        text = text.concat(`[Image](${images[0]})`);
       }
     }
   }
 
-  const sendMessage = {
+  const sendMessage: Telegram.SendMessage = {
     chat_id: chatId,
     text: text,
+    reply_to_message_id: replyId,
     parse_mode: "Markdown",
   };
 
