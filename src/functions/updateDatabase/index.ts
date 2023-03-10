@@ -1,19 +1,11 @@
 import {
   DynamoDBClient,
   BatchWriteItemCommand,
-  DynamoDB,
-  PutItemCommand,
-  WriteRequest,
-  PutRequest,
-  AttributeValue,
+  WriteRequest
 } from "@aws-sdk/client-dynamodb";
 import {
   Card,
   CardInput,
-  CardSet,
-  CardSetInput,
-  CardImage,
-  CardImageInput,
 } from "./card";
 
 // Handler
@@ -21,8 +13,11 @@ exports.handler = async function (event: any, context: any) {
   const cards: Card[] = [];
   const batchRequests: WriteRequest[] = [];
 
-  const tableName: string = process.env.TABLE_NAME || "ygoTcg";
-  console.log(tableName);
+  if(!process.env.TABLE_NAME) {
+    return;
+  }
+  const tableName = process.env.TABLE_NAME;
+  
   event.Records.forEach((record: { body: string }) => {
     const cardInput = JSON.parse(record.body) as CardInput;
     const card = new Card(cardInput);
@@ -31,7 +26,7 @@ exports.handler = async function (event: any, context: any) {
     batchRequests.push({
       PutRequest: {
         Item: {
-          id: { S: card.id.toString() },
+          id: { N: `${card.id}` },
           name: { S: card.name },
           type: { S: card.type },
           desc: { S: card.desc },
@@ -44,24 +39,21 @@ exports.handler = async function (event: any, context: any) {
           scale: { S: card.scale || "" },
           link: { S: card.link || "" },
           linkMarkers: {
-            SS: card.linkMarkers || [""],
+            SS: [...new Set(card.linkMarkers), ""],
           },
-          cardSets: { SS: card.cardSets.map((set) => set.setName) },
-          cardImages: { SS: card.cardImages.map((img) => img.imageUrl) },
+          cardSets: { SS: [... new Set(card.cardSets.map((set) => set.setCode)), ""]},
+          cardImages: { SS: [...card.cardImages.map((img) => img.imageUrl), ""] },
         },
       },
     });
   });
 
   const db = new DynamoDBClient({ region: "us-east-2" });
+  const batch: Record<string, WriteRequest[]> = {};
+  batch[tableName] = batchRequests;
   const results = await db.send(
     new BatchWriteItemCommand({
-      RequestItems: {
-        "ygoTcg": batchRequests
-      },
+      RequestItems: batch
     })
   );
-
-  if(results)
-    console.log("RESULTS", JSON.stringify(results));
 };

@@ -1,32 +1,41 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: An AWS Lambda application that calls the Lambda API.
+
+Parameters:
+  ygoTcgTableName:
+    Description: Dynamo YGO TCG table name
+    Type: String
+    Default: ygoTcg
+  userId:
+    Description: User ID for SQS and SQS client with permissions
+    Type: String
+  botName:
+    Description: Telegram bot name
+    Type: String
+  botToken:
+    Description: Telegram bot token
+    Type: String
 Resources:
-  # user: 
-  #   Type: AWS::IAM::User
-  #   Properties:
-  #     Path: '/'
-  #     UserName: telegram-user
-  #     LoginProfile: 
-  #       Password: "pa$$W0rd"
-  #       PasswordResetRequired: true        
-  #     Policies: 
-  #       - PolicyName: telegram-bot
-  #         PolicyDocument:
-  #           Version: '2012-10-17'
-  #           Statement:
-  #             - Sid: updateDatabaseSQSFullAccess
-  #               Resource: 
-  #                 - '*'
-  #               Effect: Allow
-  #               Action:
-  #                 - 's3:*'
-  #                 - 'sqs:*'
-  #                 - 'lamda:*'
-  #                 - 'dynamodb:*'
+  ygoTcgDynamoDatabase:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ygoTcgTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: N
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
   telegramWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Environment:
+        Variables:
+          BOT_NAME: !Ref botName
+          BOT_TOKEN: !Ref botToken
+          TABLE_NAME: !Ref ygoTcgTableName
       FunctionName: telegramWebhook
       Handler: index.handler
       Runtime: nodejs18.x
@@ -36,14 +45,17 @@ Resources:
       FunctionUrlConfig:
         AuthType: NONE
       Policies:
-        - AWSLambdaBasicExecutionRole
-        - AWSLambda_ReadOnlyAccess
-        - AWSLambdaDynamoDBExecutionRole
+        # - AWSLambdaBasicExecutionRole
+        # - AWSLambda_ReadOnlyAccess
+        # - AWSLambdaDynamoDBExecutionRole
         - AmazonDynamoDBReadOnlyAccess
       Tracing: Active
   updateDatabaseFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ygoTcgTableName
       FunctionName: updateDatabase
       Handler: index.handler
       Runtime: nodejs18.x
@@ -51,8 +63,8 @@ Resources:
       Description: YGO TCG card database update
       Timeout: 10
       Policies:
-        - AWSLambdaBasicExecutionRole
-        - AWSLambda_ReadOnlyAccess
+        # - AWSLambdaBasicExecutionRole
+        # - AWSLambda_ReadOnlyAccess
         - DatabaseAdministrator
       Events:
         SQSEvent:
@@ -79,7 +91,8 @@ Resources:
             Effect: Allow
             Principal:
               AWS:
-                - <USER>
+                - !Ref userId
+
             Resource: !GetAtt updateDatabaseSQS.Arn
       Queues:
         - !Ref updateDatabaseSQS
