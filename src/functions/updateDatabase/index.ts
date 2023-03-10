@@ -11,11 +11,12 @@ exports.handler = async function (event: any, context: any) {
   const cards: Card[] = [];
   const batchRequests: WriteRequest[] = [];
 
-  if (!process.env.TABLE_NAME || !process.env.VARIABLES_TABLE_NAME) {
+  if (!process.env.TABLE_NAME || !process.env.VARIABLES_TABLE_NAME || !process.env.REGION) {
     return;
   }
   const tableName = process.env.TABLE_NAME;
   const variablesTableName = process.env.VARIABLES_TABLE_NAME;
+  const region = process.env.REGION;
 
   event.Records.forEach((record: { body: string }) => {
     const cardInput = JSON.parse(record.body) as CardInput;
@@ -51,7 +52,7 @@ exports.handler = async function (event: any, context: any) {
     });
   });
 
-  const db = new DynamoDBClient({ region: "us-east-2" });
+  const db = new DynamoDBClient({ region: region });
   const batch: Record<string, WriteRequest[]> = {};
   batch[tableName] = batchRequests;
   await db.send(
