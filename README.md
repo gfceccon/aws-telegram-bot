@@ -25,18 +25,6 @@ Create a bot account and create the bot token, see the Telegram API documentatio
 First, create a file named `config.json` at the root folder, fill it with the enviornment variables you got from the AWS account and the Telgram bot.
 ```
 [
-    {
-         "ParameterKey": "ygoTcgTableName",
-         "ParameterValue": "ygoTcg"
-     },
-    {
-         "ParameterKey": "variablesTableName",
-         "ParameterValue": "variables"
-     },
-     {
-         "ParameterKey": "region",
-         "ParameterValue": "us-east-2"
-     },
      {
          "ParameterKey": "userId",
          "ParameterValue": "<YOUR USER ID>"
@@ -52,7 +40,7 @@ First, create a file named `config.json` at the root folder, fill it with the en
  ]
 ```
 
-You can change the table names from `ygoTcgTableName` and `variablesTableName`, but they must match the Node.js configuration file.
+You can change the table names from `ygoTcgTableName` and `variablesTableName`, besides the `region`, but they must match the Node.js configuration file.
 
 After login the AWS CLI, you need to create a bucket for the stack files.
 

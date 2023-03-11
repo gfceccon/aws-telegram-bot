@@ -12,7 +12,7 @@ Parameters:
     Type: String
     Default: variables
   region:
-    Description: Dynamo YGO TCG table name
+    Description: AWS region
     Type: String
     Default: us-east-2
   userId:

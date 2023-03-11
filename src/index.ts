@@ -89,19 +89,17 @@ const sendDb = async (
     Keys: [{ id: { S: "MIN_CARD_ID" } }, { id: { S: "MAX_CARD_ID" } }],
   };
 
-  const variables = await db.send(
+  const varResults = await db.send(
     new BatchGetItemCommand({
       RequestItems: readBatch,
     })
   );
   let minCardIdDb = null;
   let maxCardIdDb = null;
-
-  console.log("MIN AND MAX VARIABLES", variables);
   
-  if (variables.Responses && variables.Responses[VARIABLES_TABLE_NAME] && variables.Responses[VARIABLES_TABLE_NAME].length >= 2) {
-    minCardIdDb = variables.Responses[VARIABLES_TABLE_NAME][0]["value"] || null;
-    maxCardIdDb = variables.Responses[VARIABLES_TABLE_NAME][1]["value"] || null;
+  if (varResults.Responses && varResults.Responses[VARIABLES_TABLE_NAME] && varResults.Responses[VARIABLES_TABLE_NAME].length >= 2) {
+    minCardIdDb = varResults.Responses[VARIABLES_TABLE_NAME][0]["value"] || null;
+    maxCardIdDb = varResults.Responses[VARIABLES_TABLE_NAME][1]["value"] || null;
   }
 
   const cardIds = cards
@@ -111,7 +109,7 @@ const sendDb = async (
     });
   let minCardId = cardIds[0];
   let maxCardId = cardIds[cardIds.length - 1];
-  console.log(cards.filter((card) => card.id == maxCardId.toString()));
+  
   if (minCardIdDb && minCardIdDb.S) {
     if (parseInt(minCardIdDb.S) < minCardId)
       minCardId = parseInt(minCardIdDb.S);
@@ -120,6 +118,8 @@ const sendDb = async (
     if (parseInt(maxCardIdDb.S) > maxCardId)
       maxCardId = parseInt(maxCardIdDb.S);
   }
+
+  console.log("MIN AND MAX IDS", minCardId, maxCardId);
 
   const writeBatch: Record<string, WriteRequest[]> = {};
   writeBatch[VARIABLES_TABLE_NAME] = [
@@ -142,13 +142,13 @@ const sendDb = async (
     },
   ];
 
-  const results = await db.send(
+  const writeResults = await db.send(
     new BatchWriteItemCommand({
       RequestItems: writeBatch,
     })
   );
-  console.log(results);
-  return results;
+  
+  return {varResults, writeResults};
 };
 
 (async () => {
@@ -197,38 +197,7 @@ const sendDb = async (
   );
 
   if (dbOutput) {
-    const consumed = dbOutput.ConsumedCapacity?.map((capacity) => {
-      return {
-        tableName: capacity.TableName,
-        capacityUnits: capacity.CapacityUnits,
-        readCapacityUnits: capacity.ReadCapacityUnits,
-        writeCapacityUnits: capacity.WriteCapacityUnits,
-      };
-    });
-    console.log(consumed);
-
-    if (dbOutput.UnprocessedItems) {
-      Object.keys(dbOutput.UnprocessedItems).forEach((item) => {
-        if (dbOutput.UnprocessedItems) {
-          const unprocessed = dbOutput.UnprocessedItems[item]
-            .map((request: WriteRequest) => {
-              return {
-                put: request.PutRequest ? 1 : 0,
-                delete: request.DeleteRequest ? 1 : 0,
-              };
-            })
-            .reduce(
-              (previous, current) => {
-                return {
-                  put: current.put + previous.put,
-                  delete: current.delete + previous.delete,
-                };
-              },
-              { put: 0, delete: 0 }
-            );
-          console.log(unprocessed);
-        }
-      });
-    }
+    console.log("READ VARIABLES RESPONSE", dbOutput.varResults.$metadata.httpStatusCode);
+    console.log("WRITE VARIABLES RESPONSE", dbOutput.writeResults.$metadata.httpStatusCode);
   }
 })();

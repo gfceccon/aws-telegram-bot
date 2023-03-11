@@ -2,7 +2,6 @@ import {
   DynamoDBClient,
   BatchWriteItemCommand,
   WriteRequest,
-  GetItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { Card, CardInput } from "./card";
 
@@ -11,11 +10,10 @@ exports.handler = async function (event: any, context: any) {
   const cards: Card[] = [];
   const batchRequests: WriteRequest[] = [];
 
-  if (!process.env.TABLE_NAME || !process.env.VARIABLES_TABLE_NAME || !process.env.REGION) {
+  if (!process.env.TABLE_NAME || !process.env.REGION) {
     return;
   }
   const tableName = process.env.TABLE_NAME;
-  const variablesTableName = process.env.VARIABLES_TABLE_NAME;
   const region = process.env.REGION;
 
   event.Records.forEach((record: { body: string }) => {

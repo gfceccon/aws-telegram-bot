@@ -184,6 +184,7 @@ exports.handler = async function (event: any, context: any) {
           break;
       }
 
+      text = text.concat("\n");
       text = text.concat("_" + cardDescription + "_");
 
       text = text.replace("-", "\-").replace("[", "\[").replace("]", "\]");
